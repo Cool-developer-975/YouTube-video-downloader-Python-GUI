@@ -32,7 +32,7 @@ def show_popup(err_msg:str):
     close_btn.pack(padx=20,pady=10)
 
 
-def combineAudioVideo(audio_path:str,video_path:str,orig_name:str,v_format:str):
+def combineAudioVideo(audio_path:str,video_path:str,orig_name:str):
     try:
         audio_clip = AudioFileClip(audio_path)
         video_clip = VideoFileClip(video_path)
@@ -64,7 +64,7 @@ def downloadVideo_task():
         if video and audio:
             audio_path = audio.download(filename="audio.mp4")
             video_path = video.download(output_path="./")
-            combineAudioVideo(audio_path,video_path,yt.title,vid_format)
+            combineAudioVideo(audio_path,video_path,yt.title)
         else:
             show_popup("Video quality or video extension not found select different quality or extension.")
     except VideoUnavailable as e:
@@ -74,8 +74,6 @@ def downloadVideo_task():
     
 
 def downloadVideo():
-    global aud_path
-    global vid_path
     download_task = threading.Thread(target=downloadVideo_task)
     download_task.start()
     return
