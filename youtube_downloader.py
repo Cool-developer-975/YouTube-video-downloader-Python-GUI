@@ -39,7 +39,7 @@ def combineAudioVideo(audio_path:str,video_path:str,orig_name:str):
         video_clip = video_clip.set_audio(audio_clip)
         global invalid_chars_pattern
         orig_name = re.sub(invalid_chars_pattern,'_',orig_name)
-        video_clip.write_videofile(f"./downloads/{orig_name}.mp4", codec="libx264", audio_codec="aac")
+        video_clip.write_videofile(f"./downloads/{orig_name}.mp4", codec="h264", audio_codec="aac")
         make_download_status_visible()
         print("Downloaded")
         os.remove(audio_path)
