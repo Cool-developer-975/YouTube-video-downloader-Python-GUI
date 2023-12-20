@@ -1,125 +1,88 @@
-import os
-import tkinter as tk
-from pytube import YouTube
-from tkinter import ttk
-from pytube.exceptions import VideoUnavailable
-import threading
-import re
-from moviepy.editor import VideoFileClip,AudioFileClip
+import io
+import customtkinter as ctk
+from PIL import Image,ImageTk
+import subprocess
+import urllib.request
 
-if not os.path.exists("./downloads"):
-    os.makedirs("./downloads")
-
-invalid_chars_pattern = r'[<>:"/\\|?*]'
-
-def make_download_status_visible():
-    title1.configure(text="Successfully downloaded",fg="green")
-    root.after(3000, reset_download_status)
-    return
-
-def reset_download_status():
-    title1.configure(text="Enter the url of the YouTube video",fg="white")
-    return
-
-def show_popup(err_msg:str):
-    popup = tk.Toplevel(root,bg="#2b2a33")
-    popup.title("Error")
-    popup.geometry("500x500")
-
-    label = tk.Label(popup,text=err_msg,justify="center",bg="#2b2a33",fg="white",font=("system-ui",12))
-    label.pack(padx=20,pady=10)
-    close_btn = tk.Button(popup,text="Ok",bg="#0ea5e9",fg="white",width=14,height=1,relief="flat",font=("system-ui",10),command=popup.destroy)
-    close_btn.pack(padx=20,pady=10)
-
-
-def combineAudioVideo(audio_path:str,video_path:str,orig_name:str):
+def place_thumbnail_image(thumbnail_url,thumbnail_label):
     try:
-        audio_clip = AudioFileClip(audio_path)
-        video_clip = VideoFileClip(video_path)
-        video_clip = video_clip.set_audio(audio_clip)
-        global invalid_chars_pattern
-        orig_name = re.sub(invalid_chars_pattern,'_',orig_name)
-        video_clip.write_videofile(f"./downloads/{orig_name}.mp4", codec="h264", audio_codec="aac")
-        make_download_status_visible()
-        print("Downloaded")
-        os.remove(audio_path)
-        os.remove(video_path)
+        with urllib.request.urlopen(thumbnail_url) as response:
+            image_data = response.read()
+        image = Image.open(io.BytesIO(image_data))
+        thumbnail = ctk.CTkImage(light_image=image,dark_image=image,size=(400,200))
+        thumbnail_label.configure(image=thumbnail)
     except Exception as e:
-        show_popup(f"{e}")
-    return
+        print(f"{e}")
 
-def downloadVideo_task():
+
+
+
+def get_entry_url(url,thumbnail_label):
+    commands = ['yt-dlp','--get-thumbnail',url.get()]
     try:
-        resolution = selected_option.get()
-        vid_format = selected_format.get()
-        url = video_link.get()
-        yt = YouTube(url)
-        streams = yt.streams.filter(adaptive=True)
-        print(streams)
-        v_streams = streams.filter(file_extension=vid_format,res=resolution)
-        audio_streams = streams.filter(only_audio=True)
-        print(f"{v_streams} \n {audio_streams}")
-        video = v_streams.first()
-        audio = audio_streams.first()
-        if video and audio:
-            audio_path = audio.download(filename="audio.mp4")
-            video_path = video.download(output_path="./")
-            combineAudioVideo(audio_path,video_path,yt.title)
-        else:
-            show_popup("Video quality or video extension not found select different quality or extension.")
-    except VideoUnavailable as e:
-        show_popup("Video is not available!")
-    except:
-        show_popup("An error occured!")
+        result = subprocess.run(commands,capture_output=True,text=True,check=True)
+        thumbnail_url = result.stdout.strip()
+        place_thumbnail_image(thumbnail_url,thumbnail_label)
+    except subprocess.CalledProcessError as e:
+        print(f"error:{e}")
     
 
-def downloadVideo():
-    download_task = threading.Thread(target=downloadVideo_task)
-    download_task.start()
+def app():
+    ctk.set_appearance_mode("dark")
+    root = ctk.CTk()
+    root.title("Youtube video downloader")
+    root.geometry("600x600")
+    root.columnconfigure(0,weight=1)
+    root.rowconfigure(0,weight=1)
+
+    # font
+    f = ("system-ui",17)
+
+    # main frame
+    main_frame = ctk.CTkFrame(root)
+    main_frame.grid(row=0,column=0,padx=20,pady=20,sticky="nswe")
+
+    # Error msg
+    error_msg = ctk.CTkLabel(main_frame,font=f,text="Error")
+    main_frame.columnconfigure(0,weight=1)
+    error_msg.grid(row=0,column=0,pady=10)
+
+    # thumbnail section
+    thumbnail_label = ctk.CTkLabel(main_frame,text="",font=f)
+    thumbnail_label.grid(row=1,column=0,pady=10)
+
+    # url section
+
+    # url input
+    url = ctk.StringVar()
+    url_entry = ctk.CTkEntry(main_frame,width=400,height=32,placeholder_text="Enter the url of the video",font=("system-ui",16),justify="center",textvariable=url)
+    url_entry.grid(row=2,column=0,pady=10)
+    url_entry.bind("<KeyRelease>",lambda event: get_entry_url(url,thumbnail_label))
+
+    # button frame
+    btn_frame = ctk.CTkFrame(main_frame)
+    btn_frame.grid(row=3,column=0,padx=20,pady=10,sticky="ew")
+    btn_frame.columnconfigure(0,weight=1)
+    btn_frame.columnconfigure(1,weight=1)
+    btn_frame.columnconfigure(2,weight=1)
+
+    # format combobox
+    formats = ["mp4","mkv"]
+    format_combobox = ctk.CTkComboBox(btn_frame,values=formats)
+    format_combobox.set(formats[0])
+    format_combobox.grid(row=0,column=0,padx=10,pady=10)
+
+    # quality combobox
+    video_quality = ["144p","240p","360p","480p","720p","1080p"]
+    quality_combobox = ctk.CTkComboBox(btn_frame,values=video_quality)
+    quality_combobox.set(video_quality[0])
+    quality_combobox.grid(row=0,column=1,padx=10,pady=10)
+
+
+    # download button
+    download_btn = ctk.CTkButton(btn_frame,text="Download",font=("system-ui",16),border_spacing=7,hover=True,hover_color="#019bfd")
+    download_btn.grid(row=0,column=2,padx=10,pady=10)
+    root.mainloop()
     return
 
-
-# root
-root = tk.Tk()
-root.geometry("500x500")
-root.title("Youtube video Downloader")
-root.configure(bg="#2b2a33")
-
-# Variables
-video_link = tk.StringVar()
-
-
-#First heading 
-title1 = tk.Label(root,text="Enter the url of the youtube video",font=("system-ui",14),fg="white",bg="#2b2a33")
-title1.pack(padx=30,pady=10)
-
-
-
-#url input
-url_input = tk.Entry(root,width=50,justify="center",font=("system-ui",13),relief="flat",textvariable=video_link)
-url_input.pack(padx=50,pady=20)
-
-# download_component
-download_component = tk.Frame(root,bg="#2b2a33")
-download_component.pack(padx=50,pady=10)
-
-# Download button
-download_btn = tk.Button(download_component,text="Download",bg="#0ea5e9",fg="white",width=14,height=1,relief="flat",font=("system-ui",11),command=downloadVideo)
-download_btn.pack(padx=10,pady=10,side="left")
-
-# dropdown
-options = ["144p","240p","360p","480p", "720p","1080p"]
-selected_option = tk.StringVar()
-selected_option.set(options[0])
-dropdown_menu = ttk.Combobox(download_component, values=options,textvariable=selected_option)
-dropdown_menu.pack(padx=5, pady=20,side="right")
-
-
-# dropdown 2
-formats = ["mp4","mkv"]
-selected_format = tk.StringVar()
-selected_format.set(formats[0])
-dropdown_menu2 = ttk.Combobox(download_component,values=formats,textvariable=selected_format)
-dropdown_menu2.pack(padx=10, pady=20,side="right")
-
-root.mainloop()
+app()
