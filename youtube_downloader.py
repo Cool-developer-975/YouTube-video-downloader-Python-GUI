@@ -16,6 +16,7 @@ def reset_error_msg(error_msg):
 
 def reset_thumbnail_msg(thumbnail_label):
     thumbnail_label.configure(text="")
+    return
 
 def reset_progress_label(progress_label):
     progress_label.configure(text="")
@@ -31,40 +32,74 @@ def place_thumbnail_image(thumbnail_url,thumbnail_label):
         thumbnail = ctk.CTkImage(dark_image=t_image,size=(400,200))
         thumbnail_label.configure(text="",image=thumbnail)
     except Exception as e:
-        print(f"{e}")
+        print(f"pt-{e}")
         thumbnail_label.configure(text="THUMBNAIL NOT AVAILABLE!")
         thumbnail_label.after(3000,lambda:reset_thumbnail_msg(thumbnail_label))
+    return
 
+def on_change_get_size(video_size_label,url,video_quality,vid_format,error_msg):
+    try:
+        ydl = yt_dlp.YoutubeDL({"format":f"best[height<={video_quality.get()[:-1]}][ext={vid_format.get()}]"})
+        result = ydl.extract_info(url.get(),download=False)
+        if result != None:
+            size = result.get("filesize_approx")
+            if size:
+                size = size / (1024**2)
+                video_size_label.configure(text=f"Size : {size:.2f} MB")
+            else:
+                video_size_label.configure(text="Size : NA")
+        else:
+            video_size_label.configure(text="NA")
+    except Exception as e:
+        video_size_label.configure(text="Size : NA")
+        print(f"ch = {e}")
+        error_msg.configure(text="Video not available please select other formats or quality.")
+        reset_error_msg(error_msg)
 
-def get_entry_url(url, thumbnail_label, error_msg):
-    ydl = yt_dlp.YoutubeDL({'format': 'best[height<=240]'})
+def on_dropdown_change(video_size_label,url,video_quality,vid_format,error_msg):
+    video_size_label.configure(text="Please wait....")
+    t3 = Thread(target=on_change_get_size, args=(video_size_label,url,video_quality,vid_format,error_msg))
+    t3.start()
+    return    
 
+def get_entry_url(url, thumbnail_label, error_msg, video_size_label,vid_format,video_quality):
+    ydl = yt_dlp.YoutubeDL({'writethumbnail': True})
     try:
         result = ydl.extract_info(url.get(), download=False)
         if result != None:
-            thumbnail_url = result.get('thumbnail', '')
+            thumbnail_url = result.get('thumbnail', None)
 
             if thumbnail_url:
                 place_thumbnail_image(thumbnail_url, thumbnail_label)
+                size = result.get("filesize_approx",0)
+                if size:
+                    t4 = Thread(target=on_change_get_size,args=(video_size_label,url,video_quality,vid_format,error_msg))
+                    t4.start()
+                else:
+                    video_size_label.configure(text="NA")
             else:
-                raise ValueError("Thumbnail URL not found")
+                # raise ValueError("Thumbnail URL not found")
+                thumbnail_label.configure(image="",text="Thumbnail not found!",text_color="red")
+                thumbnail_label.after(3000,lambda : reset_thumbnail_msg(thumbnail_label))
 
     except yt_dlp.utils.DownloadError as e:
-        print(f"{e}")
-        error_msg.configure(text="INVALID URL", text_color="red")
+        print(f"th - {e}")
+        error_msg.configure(text="INVALID URL or video format is not available", text_color="red")
         error_msg.after(3000, lambda: reset_error_msg(error_msg))
+    return
 
-def get_thumbnail(url,thumbnail_label,error_msg):
+def get_thumbnail(url,thumbnail_label,error_msg,video_size_label,vid_format,video_quality):
     try:
-        t1 = Thread(target=get_entry_url,args=(url,thumbnail_label,error_msg))
-        t1.start()
+        if len(url.get()) > 0:
+            t1 = Thread(target=get_entry_url,args=(url,thumbnail_label,error_msg,video_size_label,vid_format,video_quality))
+            t1.start()
     except Exception as e:
         print(f"{e}")
     return
 
 def on_progress(d,progress_bar,progress_label,error_msg):
     if d['status'] == 'downloading':
-        percent = search(r'\d+\.\d',d['_percent_str'])
+        percent = search(r"\d+\.\d",d['_percent_str'])
         if percent:
             percent = float(percent.group())
             progress_bar.set(percent/100)
@@ -78,7 +113,7 @@ def on_progress(d,progress_bar,progress_label,error_msg):
         error_msg.configure(text=f"{d['error']}")
         error_msg.after(5000,lambda:reset_error_msg(error_msg))
 
-    pass
+    return
 
 def download(vid_format,video_quality,url,error_msg,progress_bar,progress_label):
     commands = {
@@ -88,11 +123,15 @@ def download(vid_format,video_quality,url,error_msg,progress_bar,progress_label)
     }
     with yt_dlp.YoutubeDL(commands) as ydl:
         try:
-            progress_bar.grid(row=5, column=0, pady=10)
+            progress_bar.grid(row=6, column=0, pady=10)
             progress_bar.set(0)
             ydl.download([url])  
         except Exception as e:
             print(f"{e}")
+            error_msg.configure(text="Error while downloading video,select another quality or video format", text_color="red")
+            progress_bar.grid_forget()
+            error_msg.after(5000, lambda: reset_error_msg(error_msg))
+        return
 
 def download_video(vid_format,video_quality,url,error_msg,progress_bar,progress_label):
     try:
@@ -102,8 +141,10 @@ def download_video(vid_format,video_quality,url,error_msg,progress_bar,progress_
         print(f"{e}")
     return
 
+
 def app():
     ctk.set_appearance_mode("dark")
+    ctk.set_default_color_theme("dark-blue")
     root = ctk.CTk()
     root.title("Youtube video downloader")
     root.geometry("600x600")
@@ -126,26 +167,30 @@ def app():
     thumbnail_label = ctk.CTkLabel(main_frame,text="",font=f,text_color="Red")
     thumbnail_label.grid(row=1,column=0,pady=10)
     
+    # video size
+    video_size_label = ctk.CTkLabel(main_frame,text="",font=f,text_color="white")
+    video_size_label.grid(row=2,column=0,pady=10)
 
     # url section
     url_label = ctk.CTkLabel(main_frame,text="Paste the url of video below",font=f)
-    url_label.grid(row=2,column=0,pady=10)
+    url_label.grid(row=3,column=0,pady=10)
+
     # url input
     url = ctk.StringVar()
     url_entry = ctk.CTkEntry(main_frame,width=400,height=32,font=("system-ui",16),justify="center",textvariable=url,text_color="white")
-    url_entry.grid(row=3,column=0,pady=10)
-    url.trace_add("write",lambda *args:get_thumbnail(url,thumbnail_label,error_msg))
+    url_entry.grid(row=4,column=0,pady=10)
+    url.trace_add("write",lambda *args:get_thumbnail(url,thumbnail_label,error_msg,video_size_label,vid_format,video_quality))
     # url_entry.bind("<KeyRelease>",lambda event: get_thumbnail(url,thumbnail_label,error_msg))
 
     # progress label
     progress_label = ctk.CTkLabel(main_frame,font=f,text="")
-    progress_label.grid(row=4,column=0,pady=10)
+    progress_label.grid(row=5,column=0,pady=10)
     # Progress bar
     progress_bar = ctk.CTkProgressBar(main_frame)
 
     # button frame
     btn_frame = ctk.CTkFrame(main_frame)
-    btn_frame.grid(row=6,column=0,padx=20,pady=10,sticky="ew")
+    btn_frame.grid(row=7,column=0,padx=20,pady=10,sticky="ew")
     btn_frame.columnconfigure(0,weight=1)
     btn_frame.columnconfigure(1,weight=1)
     btn_frame.columnconfigure(2,weight=1)
@@ -153,17 +198,17 @@ def app():
     # format combobox
     vid_format = ctk.StringVar() 
     formats = ["mp4","mkv"]
-    format_combobox = ctk.CTkComboBox(btn_frame,values=formats,font=("system-ui",14),dropdown_font=("system-ui",14),variable=vid_format)
+    format_combobox = ctk.CTkComboBox(btn_frame,values=formats,font=("system-ui",14),dropdown_font=("system-ui",14),variable=vid_format,command=lambda e:on_dropdown_change(video_size_label,url,video_quality,vid_format,error_msg))
     vid_format.set(formats[0])
     format_combobox.grid(row=0,column=0,padx=10,pady=10)
 
     # quality combobox
     video_quality = ctk.StringVar()
     video_qualities = ["144p","240p","360p","480p","720p","1080p"]
-    quality_combobox = ctk.CTkComboBox(btn_frame,values=video_qualities,font=("system-ui",14),dropdown_font=("system-ui",14),variable=video_quality)
-    video_quality.set(video_qualities[0])
+    quality_combobox = ctk.CTkComboBox(btn_frame,values=video_qualities,font=("system-ui",14),dropdown_font=("system-ui",14),variable=video_quality,command=lambda e:on_dropdown_change(video_size_label,url,video_quality,vid_format,error_msg))
+    video_quality.set(video_qualities[4])
     quality_combobox.grid(row=0,column=1,padx=10,pady=10)
-
+    
 
     # download button
     download_btn = ctk.CTkButton(btn_frame,text="Download",font=("system-ui",16),border_spacing=7,command=lambda:download_video(vid_format.get(),video_quality.get(),url.get(),error_msg,progress_bar,progress_label))
@@ -172,5 +217,6 @@ def app():
     return
 
 if not os.path.exists("./downloads"):
-        os.mkdir("./downloads")
+    os.mkdir("./downloads")
+
 app()
