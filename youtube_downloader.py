@@ -1,5 +1,6 @@
-import os 
-import io
+from os import mkdir,path
+from io import BytesIO
+from sys import exit
 from re import search
 import customtkinter as ctk
 from PIL import Image
@@ -15,31 +16,31 @@ def reset_error_msg(error_msg):
     return
 
 def reset_thumbnail_msg(thumbnail_label):
-    thumbnail_label.configure(text="")
+    thumbnail_label.configure(text="",text_color="white")
     return
 
 def reset_progress_label(progress_label):
     progress_label.configure(text="")
     return
+
+
 def place_thumbnail_image(thumbnail_url,thumbnail_label):
     try:
-        if len(images) == 1:
-            images.pop()
         with request.urlopen(thumbnail_url) as response:
             image_data = response.read()
-        t_image = Image.open(io.BytesIO(image_data))
+        t_image = Image.open(BytesIO(image_data))
         images.append(t_image)
         thumbnail = ctk.CTkImage(dark_image=t_image,size=(400,200))
         thumbnail_label.configure(text="",image=thumbnail)
     except Exception as e:
         print(f"pt-{e}")
         thumbnail_label.configure(text="THUMBNAIL NOT AVAILABLE!")
-        thumbnail_label.after(3000,lambda:reset_thumbnail_msg(thumbnail_label))
+        thumbnail_label.after(5000,lambda:reset_thumbnail_msg(thumbnail_label))
     return
 
 def on_change_get_size(video_size_label,url,video_quality,vid_format,error_msg):
     try:
-        ydl = yt_dlp.YoutubeDL({"format":f"best[height<={video_quality.get()[:-1]}][ext={vid_format.get()}]"})
+        ydl = yt_dlp.YoutubeDL({"format":f"best[height<={video_quality.get()[:-1]}][width<={video_quality.get()[:-1]}][ext={vid_format.get()}]"})
         result = ydl.extract_info(url.get(),download=False)
         if result != None:
             size = result.get("filesize_approx")
@@ -47,17 +48,17 @@ def on_change_get_size(video_size_label,url,video_quality,vid_format,error_msg):
                 size = size / (1024**2)
                 video_size_label.configure(text=f"Size : {size:.2f} MB")
             else:
-                video_size_label.configure(text="Size : NA")
+                video_size_label.configure(text="Size : NA, try downloading")
         else:
-            video_size_label.configure(text="NA")
+            video_size_label.configure(text="NA, try downloading")
     except Exception as e:
         video_size_label.configure(text="Size : NA")
         print(f"ch = {e}")
         error_msg.configure(text="Video not available please select other formats or quality.")
-        reset_error_msg(error_msg)
+        error_msg.after(5000, lambda: reset_error_msg(error_msg))
 
 def on_dropdown_change(video_size_label,url,video_quality,vid_format,error_msg):
-    video_size_label.configure(text="Please wait....")
+    video_size_label.configure(text="Please wait getting size....")
     t3 = Thread(target=on_change_get_size, args=(video_size_label,url,video_quality,vid_format,error_msg))
     t3.start()
     return    
@@ -72,25 +73,27 @@ def get_entry_url(url, thumbnail_label, error_msg, video_size_label,vid_format,v
             if thumbnail_url:
                 place_thumbnail_image(thumbnail_url, thumbnail_label)
                 size = result.get("filesize_approx",0)
+                video_size_label.configure(text="Please wait getting size....")
                 if size:
                     t4 = Thread(target=on_change_get_size,args=(video_size_label,url,video_quality,vid_format,error_msg))
                     t4.start()
                 else:
-                    video_size_label.configure(text="NA")
+                    video_size_label.configure(text="NA, try downloading")
             else:
                 # raise ValueError("Thumbnail URL not found")
                 thumbnail_label.configure(image="",text="Thumbnail not found!",text_color="red")
-                thumbnail_label.after(3000,lambda : reset_thumbnail_msg(thumbnail_label))
+                thumbnail_label.after(5000,lambda : reset_thumbnail_msg(thumbnail_label))
 
     except yt_dlp.utils.DownloadError as e:
         print(f"th - {e}")
         error_msg.configure(text="INVALID URL or video format is not available", text_color="red")
-        error_msg.after(3000, lambda: reset_error_msg(error_msg))
+        error_msg.after(5000, lambda: reset_error_msg(error_msg))
     return
 
 def get_thumbnail(url,thumbnail_label,error_msg,video_size_label,vid_format,video_quality):
     try:
         if len(url.get()) > 0:
+            thumbnail_label.configure(image=None,text="Getting thumbnail...",text_color = "white")
             t1 = Thread(target=get_entry_url,args=(url,thumbnail_label,error_msg,video_size_label,vid_format,video_quality))
             t1.start()
     except Exception as e:
@@ -108,7 +111,7 @@ def on_progress(d,progress_bar,progress_label,error_msg):
     elif d['status'] == 'finished':
         progress_label.configure(text="Download complete!")
         progress_bar.grid_forget()
-        progress_label.after(3000,lambda:reset_progress_label(progress_label))
+        progress_label.after(5000,lambda:reset_progress_label(progress_label))
     elif d['status'] == 'error':
         error_msg.configure(text=f"{d['error']}")
         error_msg.after(5000,lambda:reset_error_msg(error_msg))
@@ -117,7 +120,7 @@ def on_progress(d,progress_bar,progress_label,error_msg):
 
 def download(vid_format,video_quality,url,error_msg,progress_bar,progress_label):
     commands = {
-        'format':f'best[height<={video_quality[:-1]}]',
+        'format':f'best[height<={video_quality[:-1]}][width<={video_quality[:-1]}]',
         'outtmpl':f'./downloads/%(title)s_%(resolution)s.{vid_format}',
         'progress_hooks':[lambda d: on_progress(d,progress_bar,progress_label,error_msg)],
     }
@@ -141,6 +144,9 @@ def download_video(vid_format,video_quality,url,error_msg,progress_bar,progress_
         print(f"{e}")
     return
 
+def exitProgram()->None:
+    exit()
+    return
 
 def app():
     ctk.set_appearance_mode("dark")
@@ -148,6 +154,7 @@ def app():
     root = ctk.CTk()
     root.title("Youtube video downloader")
     root.geometry("600x600")
+    root.protocol("WM_DELETE_WINDOW",exitProgram)
     root.columnconfigure(0,weight=1)
     root.rowconfigure(0,weight=1)
 
@@ -216,7 +223,8 @@ def app():
     root.mainloop()
     return
 
-if not os.path.exists("./downloads"):
-    os.mkdir("./downloads")
+if not path.exists("./downloads"):
+    mkdir("./downloads")
 
 app()
+images.clear()
